@@ -77,6 +77,7 @@ print(
     .value_counts()
 )
 
+
 # =========================
 # CREATE TARGET VARIABLE
 # =========================
@@ -360,3 +361,118 @@ if best_model_name in ["Random Forest", "XGBoost"]:
     plt.savefig("outputs/feature_importance.png")
 
     print("\nFeature importance graph saved successfully!")
+    
+# =========================
+# EDA VISUALIZATIONS
+# =========================
+
+print("\nGenerating EDA visualizations...")
+
+# -------------------------
+# Funnel Stage Distribution
+# -------------------------
+
+plt.figure(figsize=(8, 5))
+
+interactions_df["funnel_stage"].value_counts().plot(
+    kind="bar",
+    color="skyblue"
+)
+
+plt.title("Funnel Stage Distribution")
+plt.xlabel("Funnel Stage")
+plt.ylabel("Number of Interactions")
+
+plt.tight_layout()
+
+plt.savefig(
+    "outputs/funnel_stage_distribution.png"
+)
+
+plt.close()
+
+# -------------------------
+# Device Type Distribution
+# -------------------------
+
+plt.figure(figsize=(8, 5))
+
+interactions_df["device_type"].value_counts().plot(
+    kind="bar",
+    color="lightgreen"
+)
+
+plt.title("Device Type Distribution")
+plt.xlabel("Device Type")
+plt.ylabel("Number of Interactions")
+
+plt.tight_layout()
+
+plt.savefig(
+    "outputs/device_distribution.png"
+)
+
+plt.close()
+
+# -------------------------
+# Monthly Lead Trend
+# -------------------------
+
+leads_df["month"] = (
+    leads_df["created_at"]
+    .dt.month_name()
+)
+
+plt.figure(figsize=(8, 5))
+
+leads_df["month"].value_counts().plot(
+    kind="bar",
+    color="orange"
+)
+
+plt.title("Monthly Lead Creation Trend")
+plt.xlabel("Month")
+plt.ylabel("Number of Leads")
+
+plt.tight_layout()
+
+plt.savefig(
+    "outputs/monthly_leads.png"
+)
+
+plt.close()
+
+# -------------------------
+# Session Duration Distribution
+# -------------------------
+
+plt.figure(figsize=(8, 5))
+
+plt.hist(
+    interactions_df[
+        "session_duration_seconds"
+    ].dropna(),
+    bins=30,
+    color="purple"
+)
+
+plt.title(
+    "Session Duration Distribution"
+)
+
+plt.xlabel(
+    "Session Duration (Seconds)"
+)
+
+plt.ylabel("Frequency")
+
+plt.tight_layout()
+
+plt.savefig(
+    "outputs/session_duration_distribution.png"
+)
+
+plt.close()
+
+
+print("EDA visualizations saved successfully!")
