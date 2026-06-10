@@ -44,7 +44,6 @@ mayur-sapkal-aiml-assessment/
 ├── train.py
 ├── requirements.txt
 ├── .gitignore
-└── .env
 ```
 
 ---

@@ -300,7 +300,6 @@ Behavioral signals outperform demographic information for conversion prediction.
 * SHAP-based explainability
 * Real-time prediction pipeline
 * Model monitoring and drift detection
-* Cloud deployment on AWS or GCP
 
 ```
 ```
