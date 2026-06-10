@@ -1,5 +1,22 @@
 import pandas as pd
 import numpy as np
+import json
+import joblib
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score
+)
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+
+from xgboost import XGBClassifier
 
 # =========================
 # LOAD DATASETS
@@ -13,15 +30,25 @@ interactions_df = pd.read_csv("data/interactions.csv")
 print("Datasets loaded successfully!")
 
 # =========================
-# DATA OVERVIEW
+# BASIC CLEANING
 # =========================
 
-print("\n========== DATA SHAPES ==========")
-print(f"Leads Dataset Shape: {leads_df.shape}")
-print(f"Interactions Dataset Shape: {interactions_df.shape}")
+# Remove duplicate rows
+leads_df = leads_df.drop_duplicates()
+
+# Convert datetime columns
+leads_df["created_at"] = pd.to_datetime(
+    leads_df["created_at"]
+)
+
+interactions_df["timestamp"] = pd.to_datetime(
+    interactions_df["timestamp"]
+)
+
+print("\nBasic cleaning completed!")
 
 # =========================
-# MISSING VALUES
+# MISSING VALUES SUMMARY
 # =========================
 
 print("\n========== LEADS MISSING VALUES ==========")
@@ -31,30 +58,7 @@ print("\n========== INTERACTIONS MISSING VALUES ==========")
 print(interactions_df.isnull().sum())
 
 # =========================
-# DUPLICATES
-# =========================
-
-print("\n========== DUPLICATE ROWS ==========")
-print(f"Leads Duplicates: {leads_df.duplicated().sum()}")
-print(f"Interactions Duplicates: {interactions_df.duplicated().sum()}")
-
-# =========================
-# BASIC CLEANING
-# =========================
-
-# Remove duplicate rows
-leads_df = leads_df.drop_duplicates()
-
-# Convert datetime columns
-leads_df["created_at"] = pd.to_datetime(leads_df["created_at"])
-interactions_df["timestamp"] = pd.to_datetime(
-    interactions_df["timestamp"]
-)
-
-print("\nBasic cleaning completed!")
-
-# =========================
-# IMPORTANT BUSINESS INSIGHTS
+# BUSINESS INSIGHTS
 # =========================
 
 print("\n========== FUNNEL STAGES ==========")
@@ -62,13 +66,6 @@ print(interactions_df["funnel_stage"].value_counts())
 
 print("\n========== FORM COMPLETION ==========")
 print(interactions_df["form_completed"].value_counts())
-
-print("\n========== TOP PAGE CATEGORIES ==========")
-print(
-    interactions_df["page_category"]
-    .value_counts()
-    .head(10)
-)
 
 print("\n========== DEVICE TYPES ==========")
 print(interactions_df["device_type"].value_counts())
@@ -80,34 +77,238 @@ print(
 )
 
 # =========================
-# SESSION ANALYSIS
+# CREATE TARGET VARIABLE
 # =========================
 
-print("\n========== SESSION ANALYSIS ==========")
+interactions_df["converted"] = np.where(
+    (interactions_df["form_completed"] == True) |
+    (interactions_df["funnel_stage"] == "Decision"),
+    1,
+    0
+)
 
-avg_session_duration = interactions_df[
-    "session_duration_seconds"
-].mean()
-
-avg_scroll_depth = interactions_df[
-    "scroll_depth_percent"
-].mean()
-
-avg_clicks = interactions_df[
-    "click_count"
-].mean()
-
-print(f"Average Session Duration: {avg_session_duration:.2f} seconds")
-print(f"Average Scroll Depth: {avg_scroll_depth:.2f}%")
-print(f"Average Click Count: {avg_clicks:.2f}")
+print("\n========== TARGET DISTRIBUTION ==========")
+print(interactions_df["converted"].value_counts())
 
 # =========================
-# TEMPORAL ANALYSIS
+# FEATURE ENGINEERING
 # =========================
 
-leads_df["month"] = leads_df["created_at"].dt.month_name()
+print("\nCreating lead-level features...")
 
-print("\n========== LEADS BY MONTH ==========")
-print(leads_df["month"].value_counts())
+lead_features = interactions_df.groupby("lead_id").agg({
 
-print("\nEDA completed successfully!")
+    # Engagement metrics
+    "session_duration_seconds": "mean",
+    "scroll_depth_percent": "mean",
+    "click_count": "sum",
+    "mouse_activity_score": "mean",
+
+    # Behavioral metrics
+    "session_id": "nunique",
+    "page_name": "count",
+
+    # Visitor behavior
+    "is_return_visitor": "max",
+
+    # Target
+    "converted": "max"
+
+}).reset_index()
+
+# Rename columns
+lead_features.columns = [
+    "lead_id",
+    "avg_session_duration",
+    "avg_scroll_depth",
+    "total_clicks",
+    "avg_mouse_activity",
+    "total_sessions",
+    "total_page_visits",
+    "return_visitor",
+    "converted"
+]
+
+print("\n========== FEATURE DATASET ==========")
+print(lead_features.head())
+
+# =========================
+# MERGE DATASETS
+# =========================
+
+final_df = pd.merge(
+    leads_df,
+    lead_features,
+    on="lead_id",
+    how="inner"
+)
+
+print("\n========== FINAL DATASET ==========")
+print(final_df.head())
+
+print("\nFinal Dataset Shape:", final_df.shape)
+
+# =========================
+# TARGET DISTRIBUTION
+# =========================
+
+print("\n========== FINAL TARGET DISTRIBUTION ==========")
+print(final_df["converted"].value_counts())
+
+conversion_rate = final_df["converted"].mean() * 100
+
+print(f"\nConversion Rate: {conversion_rate:.2f}%")
+
+# =========================
+# PREPARE DATA FOR MODELING
+# =========================
+
+print("\nPreparing data for modeling...")
+
+# Drop unnecessary columns
+drop_cols = [
+    "lead_id",
+    "business_email",
+    "created_at"
+]
+
+final_df = final_df.drop(columns=drop_cols)
+
+# =========================
+# ENCODE CATEGORICAL COLUMNS
+# =========================
+
+categorical_cols = final_df.select_dtypes(
+    include=["object", "bool", "string"]
+).columns
+
+label_encoders = {}
+
+# Fill missing categorical values
+for col in categorical_cols:
+    final_df[col] = final_df[col].fillna("Unknown")
+
+# Encode categorical columns
+for col in categorical_cols:
+
+    le = LabelEncoder()
+
+    final_df[col] = le.fit_transform(
+        final_df[col].astype(str)
+    )
+
+    label_encoders[col] = le
+
+# =========================
+# HANDLE MISSING VALUES
+# =========================
+
+numerical_cols = final_df.select_dtypes(
+    include=["int64", "float64"]
+).columns
+
+for col in numerical_cols:
+
+    final_df[col] = final_df[col].fillna(
+        final_df[col].median()
+    )
+
+# =========================
+# FEATURES AND TARGET
+# =========================
+
+X = final_df.drop("converted", axis=1)
+y = final_df["converted"]
+
+# =========================
+# TRAIN TEST SPLIT
+# =========================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+print("Train-test split completed!")
+
+# =========================
+# MODEL TRAINING
+# =========================
+
+models = {
+
+    "Logistic Regression": LogisticRegression(
+        max_iter=1000
+    ),
+
+    "Random Forest": RandomForestClassifier(
+        n_estimators=100,
+        random_state=42
+    ),
+
+    "XGBoost": XGBClassifier(
+        eval_metric="logloss",
+        random_state=42
+    )
+}
+
+best_model = None
+best_model_name = None
+best_auc = 0
+
+results = {}
+
+print("\nTraining models...\n")
+
+for name, model in models.items():
+
+    print(f"Training {name}...")
+
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
+
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_prob)
+
+    results[name] = {
+        "accuracy": round(accuracy, 4),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1_score": round(f1, 4),
+        "auc_roc": round(auc, 4)
+    }
+
+    print(f"\n{name} Results:")
+    print(results[name])
+
+    # Select best model
+    if auc > best_auc:
+        best_auc = auc
+        best_model = model
+        best_model_name = name
+
+# =========================
+# SAVE BEST MODEL
+# =========================
+
+joblib.dump(best_model, "models/model.pkl")
+
+print(f"\nBest Model: {best_model_name}")
+
+# =========================
+# SAVE MODEL METRICS
+# =========================
+
+with open("outputs/model_metrics.json", "w") as f:
+    json.dump(results, f, indent=4)
+
+print("\nModel metrics saved successfully!")
+
+print("\nMODEL TRAINING COMPLETED!")
