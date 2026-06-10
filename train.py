@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import joblib
+import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -312,3 +313,44 @@ with open("outputs/model_metrics.json", "w") as f:
 print("\nModel metrics saved successfully!")
 
 print("\nMODEL TRAINING COMPLETED!")
+
+# =========================
+# FEATURE IMPORTANCE
+# =========================
+
+if best_model_name in ["Random Forest", "XGBoost"]:
+
+    importance = best_model.feature_importances_
+
+    feature_importance_df = pd.DataFrame({
+        "Feature": X.columns,
+        "Importance": importance
+    })
+
+    feature_importance_df = feature_importance_df.sort_values(
+        by="Importance",
+        ascending=False
+    )
+
+    print("\n========== TOP FEATURES ==========")
+    print(feature_importance_df.head(10))
+
+    # Plot top 10 features
+    plt.figure(figsize=(10, 6))
+
+    plt.barh(
+        feature_importance_df["Feature"].head(10),
+        feature_importance_df["Importance"].head(10)
+    )
+
+    plt.xlabel("Importance")
+    plt.ylabel("Features")
+    plt.title("Top 10 Feature Importances")
+
+    plt.gca().invert_yaxis()
+
+    plt.tight_layout()
+
+    plt.savefig("outputs/feature_importance.png")
+
+    print("\nFeature importance graph saved successfully!")
