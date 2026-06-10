@@ -219,6 +219,12 @@ for col in numerical_cols:
 # =========================
 
 X = final_df.drop("converted", axis=1)
+feature_columns = X.columns.tolist()
+
+joblib.dump(
+    feature_columns,
+    "models/feature_columns.pkl"
+)
 y = final_df["converted"]
 
 # =========================
