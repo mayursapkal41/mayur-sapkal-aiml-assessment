@@ -373,11 +373,11 @@ The API can be deployed using:
 
 ### Live API
 
-*To be added after deployment*
+https://lead-conversion-prediction-api.onrender.com/
 
 ### Swagger Documentation
 
-*To be added after deployment*
+https://lead-conversion-prediction-api.onrender.com/docs
 
 ---
 
